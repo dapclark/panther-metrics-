@@ -74,7 +74,7 @@ def _load_and_filter(settings):
 
 def main():
     tab_data, tab_flag, tab_analysis = st.tabs(
-        ["Select Data", "Flag Challenges", "Analysis"]
+        ["Data", "Flagged Courses", "Analysis"]
     )
 
     # ── Select Data Tab ──────────────────────────────────────────────────

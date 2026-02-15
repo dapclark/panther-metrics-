@@ -8,13 +8,7 @@ from patterns import _build_term_order
 
 
 def render_thresholds_sidebar() -> dict:
-    """Render the sidebar with thresholds, catalog search, and pattern controls."""
-    st.sidebar.header("Search")
-
-    catalog_search = st.sidebar.text_input(
-        "Catalog Number (search)", "", help="Filter by catalog number (contains)"
-    )
-
+    """Render the sidebar with thresholds and pattern controls."""
     st.sidebar.header("Thresholds")
 
     min_enrollments = st.sidebar.number_input(
@@ -50,7 +44,7 @@ def render_thresholds_sidebar() -> dict:
     )
 
     return {
-        "catalog_search": catalog_search,
+        "catalog_search": "",
         "min_enrollments": min_enrollments,
         "dfw_threshold": dfw_threshold,
         "drop_threshold": drop_threshold,
