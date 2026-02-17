@@ -11,6 +11,7 @@ from data_loader import load_excel, clean_dataframe, build_course_term_averages
 from metrics import compute_metrics
 from patterns import detect_patterns, _build_term_order
 from analysis import generate_analysis
+from auth import is_authenticated, is_admin, render_login_page, render_logout_button
 from ui_components import (
     render_thresholds_sidebar,
     apply_filters,
@@ -25,6 +26,12 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
+
+if not is_authenticated():
+    render_login_page()
+    st.stop()
+
+render_logout_button()
 
 st.title("Panther Metrics")
 st.caption("Student Success Patterns Analyzer")
@@ -192,7 +199,7 @@ def main():
         st.session_state["selected_subjects"] = selected_subjects
 
     # ── Sidebar (shared by Flag Challenges and Analysis tabs) ────────────
-    settings = render_thresholds_sidebar()
+    settings = render_thresholds_sidebar(is_admin=is_admin())
 
     # ── Flag Challenges Tab ──────────────────────────────────────────────
     with tab_flag:
