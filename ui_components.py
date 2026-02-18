@@ -40,81 +40,84 @@ def _save_settings(settings: dict):
     _SETTINGS_PATH.write_text(json.dumps(settings, indent=2))
 
 
-def render_thresholds_sidebar(is_admin: bool = True) -> dict:
-    """Render the sidebar with thresholds and pattern controls.
+def render_thresholds_readonly() -> dict:
+    """Display current threshold settings as read-only text. Returns settings dict."""
+    settings = _load_settings()
 
-    Admins get interactive sliders; regular users see read-only values.
-    """
+    with st.expander("Current Threshold Settings", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Thresholds**")
+            st.markdown(f"- Min Avg Enrollments: **{settings['min_enrollments']}**")
+            st.markdown(f"- DFW Rate: **{settings['dfw_threshold']:.0%}**")
+            st.markdown(f"- Drop Rate: **{settings['drop_threshold']:.0%}**")
+            st.markdown(f"- Incomplete Rate: **{settings['incomplete_threshold']:.0%}**")
+            st.markdown(f"- Lapsed Incomplete: **{settings['lapsed_threshold']:.0%}**")
+            st.markdown(f"- Repeat Rate: **{settings['repeat_threshold']:.0%}**")
+        with col2:
+            st.markdown("**Pattern Detection**")
+            st.markdown(f"- Consecutive terms above threshold: **{settings['consecutive_terms']}**")
+            st.markdown(f"- Lookback window (terms): **{settings['lookback_window']}**")
+            st.markdown(f"- Trend detection terms: **{settings['trend_terms']}**")
+
+    return settings
+
+
+def render_thresholds_admin() -> dict:
+    """Render interactive threshold sliders for admins. Saves on change."""
     saved = _load_settings()
 
-    if is_admin:
-        st.sidebar.header("Thresholds")
+    st.subheader("Thresholds")
 
-        min_enrollments = st.sidebar.number_input(
-            "Min Avg Enrollments per Section",
-            value=saved["min_enrollments"], min_value=1, step=5,
-        )
-        dfw_threshold = st.sidebar.slider(
-            "DFW Rate Threshold", 0.0, 1.0, saved["dfw_threshold"], 0.01, format="%.2f",
-        )
-        drop_threshold = st.sidebar.slider(
-            "Drop Rate Threshold", 0.0, 1.0, saved["drop_threshold"], 0.01, format="%.2f",
-        )
-        incomplete_threshold = st.sidebar.slider(
-            "Incomplete Rate Threshold", 0.0, 1.0, saved["incomplete_threshold"], 0.01, format="%.2f",
-        )
-        lapsed_threshold = st.sidebar.slider(
-            "Lapsed Incomplete Threshold", 0.0, 1.0, saved["lapsed_threshold"], 0.01, format="%.2f",
-        )
-        repeat_threshold = st.sidebar.slider(
-            "Repeat Rate Threshold", 0.0, 1.0, saved["repeat_threshold"], 0.01, format="%.2f",
-        )
+    min_enrollments = st.number_input(
+        "Min Avg Enrollments per Section",
+        value=saved["min_enrollments"], min_value=1, step=5,
+    )
+    dfw_threshold = st.slider(
+        "DFW Rate Threshold", 0.0, 1.0, saved["dfw_threshold"], 0.01, format="%.2f",
+    )
+    drop_threshold = st.slider(
+        "Drop Rate Threshold", 0.0, 1.0, saved["drop_threshold"], 0.01, format="%.2f",
+    )
+    incomplete_threshold = st.slider(
+        "Incomplete Rate Threshold", 0.0, 1.0, saved["incomplete_threshold"], 0.01, format="%.2f",
+    )
+    lapsed_threshold = st.slider(
+        "Lapsed Incomplete Threshold", 0.0, 1.0, saved["lapsed_threshold"], 0.01, format="%.2f",
+    )
+    repeat_threshold = st.slider(
+        "Repeat Rate Threshold", 0.0, 1.0, saved["repeat_threshold"], 0.01, format="%.2f",
+    )
 
-        st.sidebar.header("Pattern Detection")
+    st.subheader("Pattern Detection")
 
-        consecutive_terms = st.sidebar.number_input(
-            "Consecutive terms above threshold",
-            value=saved["consecutive_terms"], min_value=1, max_value=20,
-        )
-        lookback_window = st.sidebar.number_input(
-            "Lookback window (terms)",
-            value=saved["lookback_window"], min_value=2, max_value=50,
-        )
-        trend_terms = st.sidebar.number_input(
-            "Trend detection terms",
-            value=saved["trend_terms"], min_value=2, max_value=20,
-        )
+    consecutive_terms = st.number_input(
+        "Consecutive terms above threshold",
+        value=saved["consecutive_terms"], min_value=1, max_value=20,
+    )
+    lookback_window = st.number_input(
+        "Lookback window (terms)",
+        value=saved["lookback_window"], min_value=2, max_value=50,
+    )
+    trend_terms = st.number_input(
+        "Trend detection terms",
+        value=saved["trend_terms"], min_value=2, max_value=20,
+    )
 
-        settings = {
-            "catalog_search": "",
-            "min_enrollments": min_enrollments,
-            "dfw_threshold": dfw_threshold,
-            "drop_threshold": drop_threshold,
-            "incomplete_threshold": incomplete_threshold,
-            "lapsed_threshold": lapsed_threshold,
-            "repeat_threshold": repeat_threshold,
-            "consecutive_terms": consecutive_terms,
-            "lookback_window": lookback_window,
-            "trend_terms": trend_terms,
-        }
-        _save_settings(settings)
-        return settings
-
-    # ── Read-only path for regular users ──────────────────────────────
-    st.sidebar.header("Thresholds (read-only)")
-    st.sidebar.markdown(f"**Min Avg Enrollments:** {saved['min_enrollments']}")
-    st.sidebar.markdown(f"**DFW Rate Threshold:** {saved['dfw_threshold']:.0%}")
-    st.sidebar.markdown(f"**Drop Rate Threshold:** {saved['drop_threshold']:.0%}")
-    st.sidebar.markdown(f"**Incomplete Rate Threshold:** {saved['incomplete_threshold']:.0%}")
-    st.sidebar.markdown(f"**Lapsed Incomplete Threshold:** {saved['lapsed_threshold']:.0%}")
-    st.sidebar.markdown(f"**Repeat Rate Threshold:** {saved['repeat_threshold']:.0%}")
-
-    st.sidebar.header("Pattern Detection (read-only)")
-    st.sidebar.markdown(f"**Consecutive terms:** {saved['consecutive_terms']}")
-    st.sidebar.markdown(f"**Lookback window:** {saved['lookback_window']}")
-    st.sidebar.markdown(f"**Trend detection terms:** {saved['trend_terms']}")
-
-    return saved
+    settings = {
+        "catalog_search": "",
+        "min_enrollments": min_enrollments,
+        "dfw_threshold": dfw_threshold,
+        "drop_threshold": drop_threshold,
+        "incomplete_threshold": incomplete_threshold,
+        "lapsed_threshold": lapsed_threshold,
+        "repeat_threshold": repeat_threshold,
+        "consecutive_terms": consecutive_terms,
+        "lookback_window": lookback_window,
+        "trend_terms": trend_terms,
+    }
+    _save_settings(settings)
+    return settings
 
 
 def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:

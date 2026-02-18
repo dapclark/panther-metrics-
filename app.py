@@ -13,7 +13,9 @@ from patterns import detect_patterns, _build_term_order
 from analysis import generate_analysis
 from auth import is_authenticated, is_admin, render_login_page, render_logout_button
 from ui_components import (
-    render_thresholds_sidebar,
+    _load_settings,
+    render_thresholds_readonly,
+    render_thresholds_admin,
     apply_filters,
     render_flagged_table,
     render_course_drilldown,
@@ -80,9 +82,14 @@ def _load_and_filter(settings):
 
 
 def main():
-    tab_data, tab_flag, tab_analysis = st.tabs(
-        ["Data", "Flagged Courses", "Analysis"]
-    )
+    if is_admin():
+        tab_data, tab_flag, tab_analysis, tab_admin = st.tabs(
+            ["Data", "Flagged Courses", "Analysis", "Admin"]
+        )
+    else:
+        tab_data, tab_flag, tab_analysis = st.tabs(
+            ["Data", "Flagged Courses", "Analysis"]
+        )
 
     # ── Select Data Tab ──────────────────────────────────────────────────
     with tab_data:
@@ -198,8 +205,17 @@ def main():
         st.session_state["selected_terms"] = selected_terms
         st.session_state["selected_subjects"] = selected_subjects
 
-    # ── Sidebar (shared by Flag Challenges and Analysis tabs) ────────────
-    settings = render_thresholds_sidebar(is_admin=is_admin())
+        # Show current thresholds (read-only for all users)
+        st.divider()
+        render_thresholds_readonly()
+
+    # ── Admin Tab (admin only) ────────────────────────────────────────────
+    if is_admin():
+        with tab_admin:
+            render_thresholds_admin()
+
+    # ── Load settings for downstream tabs ─────────────────────────────────
+    settings = _load_settings()
 
     # ── Flag Challenges Tab ──────────────────────────────────────────────
     with tab_flag:
