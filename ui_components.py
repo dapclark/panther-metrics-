@@ -40,6 +40,22 @@ def _save_settings(settings: dict):
     _SETTINGS_PATH.write_text(json.dumps(settings, indent=2))
 
 
+def render_settings_sidebar():
+    """Always-visible sidebar display of current threshold settings."""
+    settings = _load_settings()
+    st.sidebar.header("Current Settings")
+    st.sidebar.markdown(f"**Min Enrollments:** {settings['min_enrollments']}")
+    st.sidebar.markdown(f"**DFW Rate:** {settings['dfw_threshold']:.0%}")
+    st.sidebar.markdown(f"**Drop Rate:** {settings['drop_threshold']:.0%}")
+    st.sidebar.markdown(f"**Incomplete Rate:** {settings['incomplete_threshold']:.0%}")
+    st.sidebar.markdown(f"**Lapsed Incomplete:** {settings['lapsed_threshold']:.0%}")
+    st.sidebar.markdown(f"**Repeat Rate:** {settings['repeat_threshold']:.0%}")
+    st.sidebar.divider()
+    st.sidebar.markdown(f"**Consecutive terms:** {settings['consecutive_terms']}")
+    st.sidebar.markdown(f"**Lookback window:** {settings['lookback_window']}")
+    st.sidebar.markdown(f"**Trend terms:** {settings['trend_terms']}")
+
+
 def render_thresholds_readonly() -> dict:
     """Display current threshold settings as read-only text. Returns settings dict."""
     settings = _load_settings()

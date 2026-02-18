@@ -14,6 +14,7 @@ from analysis import generate_analysis
 from auth import is_authenticated, is_admin, render_login_page, render_logout_button
 from ui_components import (
     _load_settings,
+    render_settings_sidebar,
     render_thresholds_readonly,
     render_thresholds_admin,
     apply_filters,
@@ -34,6 +35,7 @@ if not is_authenticated():
     st.stop()
 
 render_logout_button()
+render_settings_sidebar()
 
 st.title("Panther Metrics")
 st.caption("Student Success Patterns Analyzer")
@@ -91,7 +93,16 @@ def main():
             ["Data", "Flagged Courses", "Analysis"]
         )
 
+    # ── Admin Tab (admin only) ────────────────────────────────────────────
+    if is_admin():
+        with tab_admin:
+            render_thresholds_admin()
+
+    # ── Load settings for downstream tabs ─────────────────────────────────
+    settings = _load_settings()
+
     # ── Select Data Tab ──────────────────────────────────────────────────
+    data_ready = False
     with tab_data:
         uploaded_file = st.file_uploader(
             "Upload Section Attrition & Grade Report (Excel)",
@@ -102,208 +113,197 @@ def main():
         if uploaded_file is None:
             st.info("Upload an Excel file to begin analysis.")
             render_methodology()
-            return
+        else:
+            # Load and validate
+            try:
+                raw_df, info = load_excel(uploaded_file)
+            except Exception as e:
+                st.error(f"Error reading Excel file: {e}")
+                raw_df = None
 
-        # Load and validate
-        try:
-            raw_df, info = load_excel(uploaded_file)
-        except Exception as e:
-            st.error(f"Error reading Excel file: {e}")
-            return
+            if raw_df is not None:
+                # Validation summary
+                st.subheader("Upload Summary")
+                st.write(f"**Rows loaded:** {info['total_rows']}")
 
-        # Validation summary
-        st.subheader("Upload Summary")
-        st.write(f"**Rows loaded:** {info['total_rows']}")
+                if info["missing_required"]:
+                    st.error(
+                        f"**Missing required columns:** {', '.join(info['missing_required'])}"
+                    )
+                    st.stop()
 
-        if info["missing_required"]:
-            st.error(
-                f"**Missing required columns:** {', '.join(info['missing_required'])}"
-            )
-            st.stop()
+                if info["missing_optional"]:
+                    st.warning(
+                        f"**Missing optional columns (will default to 0):** "
+                        f"{', '.join(info['missing_optional'])}"
+                    )
 
-        if info["missing_optional"]:
-            st.warning(
-                f"**Missing optional columns (will default to 0):** "
-                f"{', '.join(info['missing_optional'])}"
-            )
+                # Clean data
+                section_df, rollup_count, _ = clean_dataframe(raw_df)
+                st.write(f"**Rollup/total rows removed:** {rollup_count}")
+                st.write(f"**Individual section rows retained:** {len(section_df)}")
+                st.success("Data loaded successfully.")
 
-        # Clean data
-        section_df, rollup_count, _ = clean_dataframe(raw_df)
-        st.write(f"**Rollup/total rows removed:** {rollup_count}")
-        st.write(f"**Individual section rows retained:** {len(section_df)}")
-        st.success("Data loaded successfully.")
+                # Compute section-level metrics, then build course-term averages
+                section_df = compute_metrics(section_df)
+                course_term_df = build_course_term_averages(section_df)
 
-        # Compute section-level metrics, then build course-term averages
-        section_df = compute_metrics(section_df)
-        course_term_df = build_course_term_averages(section_df)
+                # ── Term and Subject selection via checkboxes ────────────
+                st.divider()
+                st.subheader("Select Terms")
 
-        # ── Term and Subject selection via checkboxes ────────────────────
-        st.divider()
-        st.subheader("Select Terms")
+                all_terms = sorted(
+                    section_df["Term Description"].unique(),
+                    key=lambda t: _build_term_order(
+                        section_df["Term Description"].unique()
+                    ).get(t, 0),
+                )
 
-        all_terms = sorted(
-            section_df["Term Description"].unique(),
-            key=lambda t: _build_term_order(
-                section_df["Term Description"].unique()
-            ).get(t, 0),
-        )
-
-        for term in all_terms:
-            if f"term_{term}" not in st.session_state:
-                st.session_state[f"term_{term}"] = True
-
-        btn_col1, btn_col2, _ = st.columns([1, 1, 4])
-        with btn_col1:
-            if st.button("Select all terms"):
                 for term in all_terms:
-                    st.session_state[f"term_{term}"] = True
-                st.rerun()
-        with btn_col2:
-            if st.button("Deselect all terms"):
-                for term in all_terms:
-                    st.session_state[f"term_{term}"] = False
-                st.rerun()
+                    if f"term_{term}" not in st.session_state:
+                        st.session_state[f"term_{term}"] = True
 
-        term_cols = st.columns(4)
-        selected_terms = []
-        for i, term in enumerate(all_terms):
-            with term_cols[i % 4]:
-                if st.checkbox(term, key=f"term_{term}"):
-                    selected_terms.append(term)
+                btn_col1, btn_col2, _ = st.columns([1, 1, 4])
+                with btn_col1:
+                    if st.button("Select all terms"):
+                        for term in all_terms:
+                            st.session_state[f"term_{term}"] = True
+                        st.rerun()
+                with btn_col2:
+                    if st.button("Deselect all terms"):
+                        for term in all_terms:
+                            st.session_state[f"term_{term}"] = False
+                        st.rerun()
 
-        st.divider()
-        st.subheader("Select Subjects")
+                term_cols = st.columns(4)
+                selected_terms = []
+                for i, term in enumerate(all_terms):
+                    with term_cols[i % 4]:
+                        if st.checkbox(term, key=f"term_{term}"):
+                            selected_terms.append(term)
 
-        all_subjects = sorted(section_df["Subject"].unique())
+                st.divider()
+                st.subheader("Select Subjects")
 
-        for subj in all_subjects:
-            if f"subj_{subj}" not in st.session_state:
-                st.session_state[f"subj_{subj}"] = True
+                all_subjects = sorted(section_df["Subject"].unique())
 
-        btn_col3, btn_col4, _ = st.columns([1, 1, 4])
-        with btn_col3:
-            if st.button("Select all subjects"):
                 for subj in all_subjects:
-                    st.session_state[f"subj_{subj}"] = True
-                st.rerun()
-        with btn_col4:
-            if st.button("Deselect all subjects"):
-                for subj in all_subjects:
-                    st.session_state[f"subj_{subj}"] = False
-                st.rerun()
+                    if f"subj_{subj}" not in st.session_state:
+                        st.session_state[f"subj_{subj}"] = True
 
-        subj_cols = st.columns(4)
-        selected_subjects = []
-        for i, subj in enumerate(all_subjects):
-            with subj_cols[i % 4]:
-                if st.checkbox(subj, key=f"subj_{subj}"):
-                    selected_subjects.append(subj)
+                btn_col3, btn_col4, _ = st.columns([1, 1, 4])
+                with btn_col3:
+                    if st.button("Select all subjects"):
+                        for subj in all_subjects:
+                            st.session_state[f"subj_{subj}"] = True
+                        st.rerun()
+                with btn_col4:
+                    if st.button("Deselect all subjects"):
+                        for subj in all_subjects:
+                            st.session_state[f"subj_{subj}"] = False
+                        st.rerun()
 
-        # Store in session state
-        st.session_state["section_df"] = section_df
-        st.session_state["course_term_df"] = course_term_df
-        st.session_state["selected_terms"] = selected_terms
-        st.session_state["selected_subjects"] = selected_subjects
+                subj_cols = st.columns(4)
+                selected_subjects = []
+                for i, subj in enumerate(all_subjects):
+                    with subj_cols[i % 4]:
+                        if st.checkbox(subj, key=f"subj_{subj}"):
+                            selected_subjects.append(subj)
+
+                # Store in session state
+                st.session_state["section_df"] = section_df
+                st.session_state["course_term_df"] = course_term_df
+                st.session_state["selected_terms"] = selected_terms
+                st.session_state["selected_subjects"] = selected_subjects
+                data_ready = True
 
         # Show current thresholds (read-only for all users)
         st.divider()
         render_thresholds_readonly()
 
-    # ── Admin Tab (admin only) ────────────────────────────────────────────
-    if is_admin():
-        with tab_admin:
-            render_thresholds_admin()
-
-    # ── Load settings for downstream tabs ─────────────────────────────────
-    settings = _load_settings()
-
     # ── Flag Challenges Tab ──────────────────────────────────────────────
     with tab_flag:
-        if "course_term_df" not in st.session_state:
-            st.info("Upload a file in the Select Data tab to begin.")
-            return
+        if not data_ready and "course_term_df" not in st.session_state:
+            st.info("Upload a file in the Data tab to begin.")
+        else:
+            result = _load_and_filter(settings)
+            if result is None:
+                st.warning(
+                    "No data matches the current filters. "
+                    "Check your selections in the Data tab."
+                )
+            else:
+                filtered_ct, filtered_section, flagged = result
 
-        result = _load_and_filter(settings)
-        if result is None:
-            st.warning(
-                "No data matches the current filters. "
-                "Check your selections in the Select Data tab."
-            )
-            return
+                # Summary metrics
+                col1, col2, col3, col4 = st.columns(4)
+                unique_courses = filtered_ct[
+                    ["Subject", "Catalog Number"]
+                ].drop_duplicates()
+                col1.metric("Courses Analyzed", len(unique_courses))
+                col2.metric("Courses Flagged", len(flagged))
+                col3.metric(
+                    "Terms in Dataset", filtered_ct["Term Description"].nunique()
+                )
+                col4.metric(
+                    "Avg DFW Rate (across courses)",
+                    f"{filtered_ct['dfw_rate'].mean():.1%}"
+                    if not filtered_ct["dfw_rate"].isna().all()
+                    else "N/A",
+                )
 
-        filtered_ct, filtered_section, flagged = result
+                # Flagged courses table
+                selected_course = render_flagged_table(flagged)
 
-        # Summary metrics
-        col1, col2, col3, col4 = st.columns(4)
-        unique_courses = filtered_ct[
-            ["Subject", "Catalog Number"]
-        ].drop_duplicates()
-        col1.metric("Courses Analyzed", len(unique_courses))
-        col2.metric("Courses Flagged", len(flagged))
-        col3.metric(
-            "Terms in Dataset", filtered_ct["Term Description"].nunique()
-        )
-        col4.metric(
-            "Avg DFW Rate (across courses)",
-            f"{filtered_ct['dfw_rate'].mean():.1%}"
-            if not filtered_ct["dfw_rate"].isna().all()
-            else "N/A",
-        )
+                # Drill-down
+                if selected_course:
+                    render_course_drilldown(
+                        selected_course,
+                        filtered_ct,
+                        filtered_section,
+                        dfw_threshold=settings["dfw_threshold"],
+                        drop_threshold=settings["drop_threshold"],
+                        incomplete_threshold=settings["incomplete_threshold"],
+                    )
 
-        # Flagged courses table
-        selected_course = render_flagged_table(flagged)
+                # Exports
+                render_exports(flagged, filtered_ct, filtered_section, selected_course)
 
-        # Drill-down
-        if selected_course:
-            render_course_drilldown(
-                selected_course,
-                filtered_ct,
-                filtered_section,
-                dfw_threshold=settings["dfw_threshold"],
-                drop_threshold=settings["drop_threshold"],
-                incomplete_threshold=settings["incomplete_threshold"],
-            )
-
-        # Exports
-        render_exports(flagged, filtered_ct, filtered_section, selected_course)
-
-        # Methodology
-        render_methodology()
+                # Methodology
+                render_methodology()
 
     # ── Analysis Tab ─────────────────────────────────────────────────────
     with tab_analysis:
-        if "course_term_df" not in st.session_state:
-            st.info("Upload a file in the Select Data tab to begin.")
-            return
+        if not data_ready and "course_term_df" not in st.session_state:
+            st.info("Upload a file in the Data tab to begin.")
+        else:
+            result = _load_and_filter(settings)
+            if result is None:
+                st.warning(
+                    "No data matches the current filters. "
+                    "Check your selections in the Data tab."
+                )
+            else:
+                filtered_ct, filtered_section, flagged = result
 
-        result = _load_and_filter(settings)
-        if result is None:
-            st.warning(
-                "No data matches the current filters. "
-                "Check your selections in the Select Data tab."
-            )
-            return
+                st.subheader("Written Analysis")
+                st.caption(
+                    "This analysis is generated from the flagged courses on the "
+                    "Flag Challenges tab. Adjusting thresholds or data selections "
+                    "will update this report."
+                )
 
-        filtered_ct, filtered_section, flagged = result
+                report = generate_analysis(flagged, filtered_ct, filtered_section, settings)
+                st.markdown(report)
 
-        st.subheader("Written Analysis")
-        st.caption(
-            "This analysis is generated from the flagged courses on the "
-            "Flag Challenges tab. Adjusting thresholds or data selections "
-            "will update this report."
-        )
-
-        report = generate_analysis(flagged, filtered_ct, filtered_section, settings)
-        st.markdown(report)
-
-        # Download the report
-        st.divider()
-        st.download_button(
-            "Download Analysis Report (Markdown)",
-            report,
-            "analysis_report.md",
-            "text/markdown",
-        )
+                # Download the report
+                st.divider()
+                st.download_button(
+                    "Download Analysis Report (Markdown)",
+                    report,
+                    "analysis_report.md",
+                    "text/markdown",
+                )
 
 
 if __name__ == "__main__":
