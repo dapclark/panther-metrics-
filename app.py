@@ -10,7 +10,7 @@ import pandas as pd
 from data_loader import load_excel, clean_dataframe, build_course_term_averages
 from metrics import compute_metrics
 from patterns import detect_patterns, _build_term_order
-from analysis import generate_analysis
+from analysis import generate_analysis, classify_severity
 from auth import is_authenticated, is_admin, render_login_page, render_logout_button
 from ui_components import (
     _load_settings,
@@ -286,24 +286,72 @@ def main():
             else:
                 filtered_ct, filtered_section, flagged = result
 
-                st.subheader("Written Analysis")
-                st.caption(
-                    "This analysis is generated from the flagged courses on the "
-                    "Flag Challenges tab. Adjusting thresholds or data selections "
-                    "will update this report."
-                )
+                if flagged.empty:
+                    st.success(
+                        "No courses were flagged based on current thresholds "
+                        "and data selections. No action needed."
+                    )
+                else:
+                    tiers = classify_severity(
+                        flagged, filtered_ct, filtered_section, settings
+                    )
 
-                report = generate_analysis(flagged, filtered_ct, filtered_section, settings)
-                st.markdown(report)
+                    # ── Action Dashboard metrics ──
+                    st.subheader("Action Dashboard")
+                    st.caption(
+                        "Courses are prioritized by severity. "
+                        "Adjusting thresholds or data selections will update this view."
+                    )
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Act Now", len(tiers["immediate"]))
+                    m2.metric("Monitor Closely", len(tiers["moderate"]))
+                    m3.metric("Awareness", len(tiers["watch"]))
 
-                # Download the report
-                st.divider()
-                st.download_button(
-                    "Download Analysis Report (Markdown)",
-                    report,
-                    "analysis_report.md",
-                    "text/markdown",
-                )
+                    # ── Immediate: always visible ──
+                    if tiers["immediate"]:
+                        st.markdown("### Act Now")
+                        for c in tiers["immediate"]:
+                            st.markdown(
+                                f"**{c['course']}** — {c['headline']}  \n"
+                                f"&rarr; {c['action']}"
+                            )
+
+                    # ── Moderate: collapsed expander ──
+                    if tiers["moderate"]:
+                        with st.expander(
+                            f"Monitor Closely ({len(tiers['moderate'])})"
+                        ):
+                            for c in tiers["moderate"]:
+                                st.markdown(
+                                    f"**{c['course']}** — {c['headline']}  \n"
+                                    f"&rarr; {c['action']}"
+                                )
+
+                    # ── Watch: collapsed expander ──
+                    if tiers["watch"]:
+                        with st.expander(
+                            f"Awareness ({len(tiers['watch'])})"
+                        ):
+                            for c in tiers["watch"]:
+                                st.markdown(
+                                    f"**{c['course']}** — {c['headline']}  \n"
+                                    f"&rarr; {c['action']}"
+                                )
+
+                    # ── Full report in expander ──
+                    st.divider()
+                    report = generate_analysis(
+                        flagged, filtered_ct, filtered_section, settings
+                    )
+                    with st.expander("Full Analysis Report"):
+                        st.markdown(report)
+
+                    st.download_button(
+                        "Download Analysis Report (Markdown)",
+                        report,
+                        "analysis_report.md",
+                        "text/markdown",
+                    )
 
 
 if __name__ == "__main__":
