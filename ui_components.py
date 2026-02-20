@@ -20,6 +20,7 @@ THRESHOLD_DEFAULTS = {
     "consecutive_terms": 2,
     "lookback_window": 6,
     "trend_terms": 4,
+    "recency_terms": 4,
 }
 
 _SETTINGS_PATH = Path(__file__).parent / "settings.json"
@@ -51,9 +52,22 @@ def render_settings_sidebar():
     st.sidebar.markdown(f"**Lapsed Incomplete:** {settings['lapsed_threshold']:.0%}")
     st.sidebar.markdown(f"**Repeat Rate:** {settings['repeat_threshold']:.0%}")
     st.sidebar.divider()
-    st.sidebar.markdown(f"**Consecutive terms:** {settings['consecutive_terms']}")
-    st.sidebar.markdown(f"**Lookback window:** {settings['lookback_window']}")
-    st.sidebar.markdown(f"**Trend terms:** {settings['trend_terms']}")
+    st.sidebar.markdown(
+        f"**Consecutive terms:** {settings['consecutive_terms']}  \n"
+        f"Terms in a row above threshold to flag as persistent"
+    )
+    st.sidebar.markdown(
+        f"**Lookback window:** {settings['lookback_window']} terms  \n"
+        f"How many past terms per course to examine"
+    )
+    st.sidebar.markdown(
+        f"**Trend terms:** {settings['trend_terms']}  \n"
+        f"Recent terms used to detect rising rates"
+    )
+    st.sidebar.markdown(
+        f"**Recency filter:** {settings['recency_terms']} terms  \n"
+        f"Skip courses not offered within this many terms of the latest"
+    )
 
 
 def render_thresholds_readonly() -> dict:
@@ -72,9 +86,22 @@ def render_thresholds_readonly() -> dict:
             st.markdown(f"- Repeat Rate: **{settings['repeat_threshold']:.0%}**")
         with col2:
             st.markdown("**Pattern Detection**")
-            st.markdown(f"- Consecutive terms above threshold: **{settings['consecutive_terms']}**")
-            st.markdown(f"- Lookback window (terms): **{settings['lookback_window']}**")
-            st.markdown(f"- Trend detection terms: **{settings['trend_terms']}**")
+            st.markdown(
+                f"- Consecutive terms above threshold: **{settings['consecutive_terms']}**"
+                " — terms in a row to flag as persistent"
+            )
+            st.markdown(
+                f"- Lookback window: **{settings['lookback_window']}** terms"
+                " — past terms per course to examine"
+            )
+            st.markdown(
+                f"- Trend detection: **{settings['trend_terms']}** terms"
+                " — recent terms used to detect rising rates"
+            )
+            st.markdown(
+                f"- Recency filter: **{settings['recency_terms']}** terms"
+                " — skip courses not offered recently"
+            )
 
     return settings
 
@@ -110,14 +137,22 @@ def render_thresholds_admin() -> dict:
     consecutive_terms = st.number_input(
         "Consecutive terms above threshold",
         value=saved["consecutive_terms"], min_value=1, max_value=20,
+        help="How many terms in a row a course must exceed the threshold to be flagged as persistent.",
     )
     lookback_window = st.number_input(
         "Lookback window (terms)",
         value=saved["lookback_window"], min_value=2, max_value=50,
+        help="How many past terms per course to examine when checking for patterns (e.g., 6 = last 6 terms offered).",
     )
     trend_terms = st.number_input(
         "Trend detection terms",
         value=saved["trend_terms"], min_value=2, max_value=20,
+        help="How many recent terms to use when calculating whether DFW rates are rising. Must be <= lookback window.",
+    )
+    recency_terms = st.number_input(
+        "Recency filter (terms)",
+        value=saved["recency_terms"], min_value=1, max_value=20,
+        help="Only flag courses offered within this many terms of the most recent term in the data. Filters out courses not offered recently.",
     )
 
     settings = {
@@ -131,6 +166,7 @@ def render_thresholds_admin() -> dict:
         "consecutive_terms": consecutive_terms,
         "lookback_window": lookback_window,
         "trend_terms": trend_terms,
+        "recency_terms": recency_terms,
     }
     _save_settings(settings)
     return settings

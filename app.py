@@ -78,6 +78,7 @@ def _load_and_filter(settings):
         consecutive_terms=settings["consecutive_terms"],
         lookback_window=settings["lookback_window"],
         trend_terms=settings["trend_terms"],
+        recency_terms=settings["recency_terms"],
     )
 
     return filtered_ct, filtered_section, flagged

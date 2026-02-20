@@ -35,6 +35,7 @@ def detect_patterns(
     lookback_window: int = 6,
     trend_terms: int = 4,
     trend_slope_cutoff: float = 0.01,
+    recency_terms: int = 4,
 ) -> pd.DataFrame:
     """Detect problematic patterns at the course level using section averages.
 
@@ -111,6 +112,18 @@ def detect_patterns(
                     "latest_term": latest["Term Description"],
                 }
             )
+
+    if not results:
+        return _empty_result()
+
+    # Filter out stale courses not offered recently
+    term_order = _build_term_order(course_term_df["Term Description"].unique())
+    if term_order:
+        max_order = max(term_order.values())
+        results = [
+            r for r in results
+            if max_order - term_order.get(r["latest_term"], 0) < recency_terms
+        ]
 
     if not results:
         return _empty_result()
